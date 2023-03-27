@@ -4,9 +4,13 @@
                      racket/syntax
                      syntax/parse))
 
-(require openai-api-client/client)
+(require request/param
+         net/url-string
+         json)
 
 (provide define-endpoint)
+
+(define openai-api-key (make-parameter (getenv "OPENAI_API_KEY")))
 
 (begin-for-syntax
   (define syntax->keyword
@@ -27,17 +31,22 @@
 (define-syntax (define-endpoint stx)
   (syntax-parse stx
     [(_ name:id
-        uri:expr
-        (request-format:id request-field:field ...)
-        (response-format:id response-field:field ...))
+        (~seq #:uri uri:expr)
+        (~alt (~optional (~seq #:headers headers))) ...
+        (~seq #:request (request-format:id request-field:field ...))
+        (~seq #:response (response-format:id response-field:field ...)))
      (with-syntax* ([request-id (format-id #'name "request-~a" #'name)]
                     [build-request-id (format-id #'name "build-~a-request" #'name)]
                     [parse-response-id (format-id #'name "parse-~a-response" #'name)]
+                    [url-id (format-id #'name "~a-url" #'name)]
                     [top-response-id (format-id #'name "~a" #'name)]
                     [((arg ...) ...) #'(request-field.arg ...)]
                     [((val ...) ...) #'(request-field.val ...)])
        #'(begin
            (struct top-response-id (response-field.name ...) #:transparent)
+           (define url-id (if (url? uri)
+                              uri
+                              (string->url uri)))
 
            (define (parse-response-id raw)
              (define-values (response-field.name ...)
@@ -56,32 +65,38 @@
              data)
 
            (define (request-id  arg ... ...)
-             (make-request #:uri uri
-                           #:data (build-request-id val ... ...)
-                           #:normalizer parse-response-id))))]))
+             (define body (string->bytes/utf-8
+                           (jsexpr->string
+                            (build-request-id val ... ...))))
+             (define response (post url-id body #:headers (~? headers null)))
+             (parse-response-id
+              (string->jsexpr
+               (http-response-body response))))))]))
 
 (define-endpoint chat-completions
-  "https://api.openai.com/v1/chat/completions"
-  (json [model string?]
-        [messages list?]
-        [temperature number? #:optional]
-        [top-p number? #:optional]
-        [n number? #:optional]
-        [stream boolean? #:optional]
-        [stop (or? string? list?) #:optional]
-        [max-tokens integer? #:optional]
-        [presence-penalty number? #:optional]
-        [frequency-penalty number? #:optional]
-        [logit-bias hash? #:optional]
-        [user string? #:optional])
-  (json [id string?]
-        [object string?]
-        [created integer?]
-        [model string?]
-        [usage (object [prompt-tokens integer?]
-                       [completion-tokens integer?]
-                       [total-tokens integer?])]
-        [choices (object [message (object [role string?]
-                                          [content string?])]
-                         [finish-reason string?]
-                         [index integer?])]))
+  #:uri "https://api.openai.com/v1/chat/completions"
+  #:headers (list "Content-Type: application/json"
+                  (format "Authorization: Bearer ~a" (openai-api-key)))
+  #:request (json [model string?]
+                  [messages list?]
+                  [temperature number? #:optional]
+                  [top-p number? #:optional]
+                  [n number? #:optional]
+                  [stream boolean? #:optional]
+                  [stop (or? string? list?) #:optional]
+                  [max-tokens integer? #:optional]
+                  [presence-penalty number? #:optional]
+                  [frequency-penalty number? #:optional]
+                  [logit-bias hash? #:optional]
+                  [user string? #:optional])
+  #:response (json [id string?]
+                   [object string?]
+                   [created integer?]
+                   [model string?]
+                   [usage (object [prompt-tokens integer?]
+                                  [completion-tokens integer?]
+                                  [total-tokens integer?])]
+                   [choices (object [message (object [role string?]
+                                                     [content string?])]
+                                    [finish-reason string?]
+                                    [index integer?])]))
