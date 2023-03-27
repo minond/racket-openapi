@@ -16,12 +16,23 @@
   (define syntax->keyword
     (compose string->keyword symbol->string syntax->datum))
 
+  (define-syntax-class field-type
+    (pattern (object -member:field ...)
+      #:with object? #'#t
+      #:with member #'(-member ...))
+    (pattern object:expr
+      #:with object? #'#f
+      #:with member #'null))
+
   (define-syntax-class field
-    (pattern (name:id type:expr (~alt (~optional (~and #:optional optional))) ...)
+    (pattern (name:id (~var type field-type) (~alt (~optional (~and #:optional optional))) ...)
+    ; (pattern (name:id type:expr (~alt (~optional (~and #:optional optional))) ...)
       #:with optional? (if (attribute optional) #'#t #'#f)
-      #:with object? #'(and (list? (syntax->datum #'type))
-                            (equal? (car (syntax->datum #'type)) 'object))
-      #:with object-content #'(cdr (syntax->datum #'type))
+      ; #:with member #'(cdr (syntax->datum #'type))
+      ; #:with object? #'(and (list? (syntax->datum #'type))
+      ;                       (equal? (car (syntax->datum #'type)) 'object))
+      #:with member #'type.member
+      #:with object? #'type.object?
       #:with kwd (syntax->keyword #'name)
       #:with val #'(kwd name)
       #:with arg (if (attribute optional)
@@ -42,7 +53,7 @@
                     [top-response-id (format-id #'name "~a" #'name)]
                     [((arg ...) ...) #'(request-field.arg ...)]
                     [((val ...) ...) #'(request-field.val ...)])
-       #'(begin
+       #`(begin
            (struct top-response-id (response-field.name ...) #:transparent)
            (define url-id (if (url? uri)
                               uri
