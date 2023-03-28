@@ -48,7 +48,7 @@
      (with-syntax* ([request-id (format-id #'name "request-~a" #'name)]
                     [build-request-id (format-id #'name "build-~a-request" #'name)]
                     [parse-response-id (format-id #'name "parse-~a-response" #'name)]
-                    [url-id (format-id #'name "~a-url" #'name)]
+                    [url-id (format-id #'name "*~a-url*" #'name)]
                     [((arg ...) ...) #'(request-field.arg ...)]
                     [((val ...) ...) #'(request-field.val ...)])
        (define (find-complex-objects fields [prefix ""])
@@ -77,9 +77,10 @@
            #,@(map (lambda (obj)
                      `(struct ,(car obj) (,@(cdr obj)) #:transparent)) response-objects)
 
-           (define url-id (if (url? uri)
-                              uri
-                              (string->url uri)))
+           (define url-id (make-parameter
+                           (if (url? uri)
+                               uri
+                               (string->url uri))))
 
            (define (parse-response-id raw)
              (define-values (response-field.name ...)
@@ -101,7 +102,7 @@
              (define body (string->bytes/utf-8
                            (jsexpr->string
                             (build-request-id val ... ...))))
-             (define response (post url-id body #:headers (~? headers null)))
+             (define response (post (url-id) body #:headers (~? headers null)))
              (parse-response-id
               (string->jsexpr
                (http-response-body response))))))]))
