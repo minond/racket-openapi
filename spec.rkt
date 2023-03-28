@@ -26,7 +26,6 @@
 
   (define-syntax-class field
     (pattern (name:id (~var type field-type) (~alt (~optional (~and #:optional optional))) ...)
-    ; (pattern (name:id type:expr (~alt (~optional (~and #:optional optional))) ...)
       #:with optional? (if (attribute optional) #'#t #'#f)
       ; #:with member #'(cdr (syntax->datum #'type))
       ; #:with object? #'(and (list? (syntax->datum #'type))
@@ -41,20 +40,43 @@
 
 (define-syntax (define-endpoint stx)
   (syntax-parse stx
-    [(_ name:id
-        (~seq #:uri uri:expr)
-        (~alt (~optional (~seq #:headers headers))) ...
-        (~seq #:request (request-format:id request-field:field ...))
-        (~seq #:response (response-format:id response-field:field ...)))
+    [(define-endpoint name:id
+       (~seq #:uri uri:expr)
+       (~alt (~optional (~seq #:headers headers))) ...
+       (~seq #:request (request-format:id request-field:field ...))
+       (~seq #:response (response-format:id response-field:field ...)))
      (with-syntax* ([request-id (format-id #'name "request-~a" #'name)]
                     [build-request-id (format-id #'name "build-~a-request" #'name)]
                     [parse-response-id (format-id #'name "parse-~a-response" #'name)]
                     [url-id (format-id #'name "~a-url" #'name)]
-                    [top-response-id (format-id #'name "~a" #'name)]
                     [((arg ...) ...) #'(request-field.arg ...)]
                     [((val ...) ...) #'(request-field.val ...)])
+       (define (find-complex-objects fields [prefix ""])
+         (apply
+          append
+          (map (lambda (field)
+                 (let ([name (format "~a~a" prefix (car field))]
+                       [subfields (cdadr field)])
+                   (cons (cons (format-id (datum->syntax #'define-endpoint field)
+                                          "~a-response" name)
+                               (map car subfields))
+                         (find-complex-objects subfields (format "~a-" name)))))
+               (filter (lambda (field)
+                         (list? (cadr field)))
+                       fields))))
+
+       (define response-fields
+         (syntax->datum #'(response-field ...)))
+
+       (define response-objects
+         (find-complex-objects
+          (list (cons (syntax->datum #'name)
+                      (list (cons 'object response-fields))))))
+
        #`(begin
-           (struct top-response-id (response-field.name ...) #:transparent)
+           #,@(map (lambda (obj)
+                     `(struct ,(car obj) (,@(cdr obj)) #:transparent)) response-objects)
+
            (define url-id (if (url? uri)
                               uri
                               (string->url uri)))
@@ -63,7 +85,7 @@
              (define-values (response-field.name ...)
                (values (hash-ref raw 'response-field.name) ...))
 
-             (top-response-id response-field.name ...))
+             (#,(caar response-objects) response-field.name ...))
 
            (define (build-request-id arg ... ...)
              (define data (make-hash))
