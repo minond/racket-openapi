@@ -4,7 +4,8 @@
                      racket/syntax
                      syntax/parse))
 
-(require request/param
+(require racket/function
+         request/param
          net/url-string
          json)
 
@@ -51,8 +52,15 @@
                     [url-id (format-id #'name "*~a-url*" #'name)]
                     [((arg ...) ...) #'(request-field.arg ...)]
                     [((val ...) ...) #'(request-field.val ...)])
+       (define (field-is? field ty)
+         (and (list? (cadr field))
+              (equal? ty (caadr field))))
+
        (define (object-field? field)
-         (list? (cadr field)))
+         (field-is? field 'object))
+
+       (define (list-field? field)
+         (field-is? field 'list))
 
        (define (find-complex-objects fields [prefix ""] [path null])
          (apply
@@ -60,14 +68,26 @@
           (map (lambda (field)
                  (let* ([name (car field)]
                         [qualified-name (format "~a~a" prefix name)]
-                        [subfields (cdadr field)])
-                   (cons (hash 'id (format-id (datum->syntax #'define-endpoint field)
-                                              "~a-response" qualified-name)
+                        [next-prefix (format "~a-" qualified-name)]
+                        [stx (datum->syntax #'define-endpoint field)]
+                        [subfields (cdadr field)]
+                        [path (append path (list name))])
+                   (cons (hash 'id (format-id stx "~a-response" qualified-name)
+                               'instance-id (format-id stx "~a-object" qualified-name)
                                'fields (map car subfields)
+                               'field-details (map (lambda (f)
+                                                     (define is-object? (object-field? f))
+                                                     (define is-list? (list-field? f))
+                                                     (define is-complex? (or is-object?
+                                                                             is-list?))
+                                                     (hash 'name (car f)
+                                                           'object? is-object?
+                                                           'list? is-list?
+                                                           'container (when is-complex?
+                                                                        (format-id stx "~a-~a-object" name (car f)))))
+                                                   subfields)
                                'path path)
-                         (find-complex-objects subfields
-                                               (format "~a-" qualified-name)
-                                               (append path (list name))))))
+                         (find-complex-objects subfields next-prefix path))))
                (filter object-field? fields))))
 
        (define response-fields
@@ -80,6 +100,7 @@
 
        (define top-response (car response-objects))
        (define top-response-id (hash-ref top-response 'id))
+       (define top-response-instance-id (hash-ref top-response 'instance-id))
        (define top-response-fields (hash-ref top-response 'fields))
 
        #`(begin
@@ -93,12 +114,42 @@
                                (string->url uri))))
 
            (define (parse-response-id raw)
+             (define (deep-hash-ref h path [last #f])
+               (define value h)
+               (define full-steps (append (cdr path) (filter identity (list last))))
+
+               (when (not (null? full-steps))
+               (let loop ([steps full-steps])
+                 (define step (car steps))
+                 (define next (hash-ref value step))
+                 (cond [(list? next)
+                        (set! value (map (lambda (item)
+                                           (deep-hash-ref item steps)) next))]
+                       [else
+                         (set! value next)
+                         (unless (null? (cdr steps))
+                           (loop (cdr steps)))])))
+
+               value)
+
+             #,@(map (lambda (obj)
+                       `(define ,(hash-ref obj 'instance-id)
+                          (,(hash-ref obj 'id)
+                           ,@(map (lambda (f)
+                                    (if (hash-ref f 'object?)
+                                        `,(hash-ref f 'container)
+                                        `(deep-hash-ref raw
+                                                        ',(hash-ref obj 'path)
+                                                        ',(hash-ref f 'name))))
+                                  (hash-ref obj 'field-details)))))
+                     (reverse response-objects))
+
              (define-values (#,@top-response-fields)
                (values #,@(map (lambda (field)
                                  `(hash-ref raw ',field))
                                top-response-fields)))
 
-             (#,top-response-id #,@top-response-fields))
+             #,top-response-instance-id)
 
            (define (build-request-id arg ... ...)
              (define data (make-hash))
@@ -119,30 +170,35 @@
               (string->jsexpr
                (http-response-body response))))))]))
 
-(define-endpoint chat-completions
-  #:uri "https://api.openai.com/v1/chat/completions"
-  #:headers (list "Content-Type: application/json"
-                  (format "Authorization: Bearer ~a" (openai-api-key)))
-  #:request (json [model string?]
-                  [messages list?]
-                  [temperature number? #:optional]
-                  [top-p number? #:optional]
-                  [n number? #:optional]
-                  [stream boolean? #:optional]
-                  [stop (or? string? list?) #:optional]
-                  [max-tokens integer? #:optional]
-                  [presence-penalty number? #:optional]
-                  [frequency-penalty number? #:optional]
-                  [logit-bias hash? #:optional]
-                  [user string? #:optional])
-  #:response (json [id string?]
-                   [object string?]
-                   [created integer?]
-                   [model string?]
-                   [usage (object [prompt-tokens integer?]
-                                  [completion-tokens integer?]
-                                  [total-tokens integer?])]
-                   [choices (object [message (object [role string?]
+; (syntax->datum
+;  (expand-once
+;   #'
+  (define-endpoint chat-completions
+    #:uri "https://api.openai.com/v1/chat/completions"
+    #:headers (list "Content-Type: application/json"
+                    (format "Authorization: Bearer ~a" (openai-api-key)))
+    #:request (json [model string?]
+                    [messages list?]
+                    [temperature number? #:optional]
+                    [top-p number? #:optional]
+                    [n number? #:optional]
+                    [stream boolean? #:optional]
+                    [stop (or? string? list?) #:optional]
+                    [max-tokens integer? #:optional]
+                    [presence-penalty number? #:optional]
+                    [frequency-penalty number? #:optional]
+                    [logit-bias hash? #:optional]
+                    [user string? #:optional])
+    #:response (json [id string?]
+                     [object string?]
+                     [created integer?]
+                     [model string?]
+                     [usage (object [prompt_tokens integer?]
+                                    [completion_tokens integer?]
+                                    [total_tokens integer?])]
+                     [choices (list [message (object [role string?]
                                                      [content string?])]
-                                    [finish-reason string?]
-                                    [index integer?])]))
+                                    [finish_reason string?]
+                                    [index integer?])]
+                     ))
+  ; ))

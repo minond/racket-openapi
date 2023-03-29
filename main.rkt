@@ -8,4 +8,4 @@
    #:messages (list (hash 'role "user"
                           'content "Can you write a summary of https://www.allthingsdistributed.com/2023/03/australia-the-new-epicenter-for-healthtech-startups.html"))))
 
-(chat-completions-response-choices x)
+(chat-completions-response-usage x)
