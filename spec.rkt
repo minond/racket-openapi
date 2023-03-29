@@ -51,19 +51,24 @@
                     [url-id (format-id #'name "*~a-url*" #'name)]
                     [((arg ...) ...) #'(request-field.arg ...)]
                     [((val ...) ...) #'(request-field.val ...)])
-       (define (find-complex-objects fields [prefix ""])
+       (define (object-field? field)
+         (list? (cadr field)))
+
+       (define (find-complex-objects fields [prefix ""] [path null])
          (apply
           append
           (map (lambda (field)
-                 (let ([name (format "~a~a" prefix (car field))]
-                       [subfields (cdadr field)])
-                   (cons (cons (format-id (datum->syntax #'define-endpoint field)
-                                          "~a-response" name)
-                               (map car subfields))
-                         (find-complex-objects subfields (format "~a-" name)))))
-               (filter (lambda (field)
-                         (list? (cadr field)))
-                       fields))))
+                 (let* ([name (car field)]
+                        [qualified-name (format "~a~a" prefix name)]
+                        [subfields (cdadr field)])
+                   (cons (hash 'id (format-id (datum->syntax #'define-endpoint field)
+                                              "~a-response" qualified-name)
+                               'fields (map car subfields)
+                               'path path)
+                         (find-complex-objects subfields
+                                               (format "~a-" qualified-name)
+                                               (append path (list name))))))
+               (filter object-field? fields))))
 
        (define response-fields
          (syntax->datum #'(response-field ...)))
@@ -73,9 +78,14 @@
           (list (cons (syntax->datum #'name)
                       (list (cons 'object response-fields))))))
 
+       (define top-response (car response-objects))
+       (define top-response-id (hash-ref top-response 'id))
+       (define top-response-fields (hash-ref top-response 'fields))
+
        #`(begin
            #,@(map (lambda (obj)
-                     `(struct ,(car obj) (,@(cdr obj)) #:transparent)) response-objects)
+                     `(struct ,(hash-ref obj 'id) (,@(hash-ref obj 'fields)) #:transparent))
+                   response-objects)
 
            (define url-id (make-parameter
                            (if (url? uri)
@@ -83,10 +93,12 @@
                                (string->url uri))))
 
            (define (parse-response-id raw)
-             (define-values (response-field.name ...)
-               (values (hash-ref raw 'response-field.name) ...))
+             (define-values (#,@top-response-fields)
+               (values #,@(map (lambda (field)
+                                 `(hash-ref raw ',field))
+                               top-response-fields)))
 
-             (#,(caar response-objects) response-field.name ...))
+             (#,top-response-id #,@top-response-fields))
 
            (define (build-request-id arg ... ...)
              (define data (make-hash))
