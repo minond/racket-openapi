@@ -5,6 +5,8 @@
                      syntax/parse))
 
 (require racket/function
+         racket/list
+         racket/string
          request/param
          net/url-string
          json)
@@ -12,6 +14,42 @@
 (provide define-endpoint)
 
 (define openai-api-key (make-parameter (getenv "OPENAI_API_KEY")))
+
+(define (field-is? field ty)
+  (and (list? (cadr field))
+       (equal? ty (caadr field))))
+
+(define (object-field? field)
+  (field-is? field 'object))
+
+(define (list-field? field)
+  (field-is? field 'list))
+
+(define (append-element lst elem)
+  (append lst (list elem)))
+
+(define (parse-data schema data path)
+  (define values
+    (map (lambda (field)
+           (cond [(object-field? field)
+                  (parse-data (cdadr field)
+                              (hash-ref data (car field))
+                              (append-element path (car field)))]
+                 [(list-field? field)
+                  (map (lambda (item-data)
+                         (parse-data (cdadr field)
+                                     item-data
+                                     (append-element path (car field))))
+                       (hash-ref data (car field)))]
+                 [else
+                  (hash-ref data (car field))]))
+         schema))
+
+  (define container-class
+    (eval (string->symbol (string-join
+                           (append-element (map symbol->string path) "response")
+                           "-"))))
+  (apply container-class values))
 
 (begin-for-syntax
   (define syntax->keyword
@@ -28,9 +66,6 @@
   (define-syntax-class field
     (pattern (name:id (~var type field-type) (~alt (~optional (~and #:optional optional))) ...)
       #:with optional? (if (attribute optional) #'#t #'#f)
-      ; #:with member #'(cdr (syntax->datum #'type))
-      ; #:with object? #'(and (list? (syntax->datum #'type))
-      ;                       (equal? (car (syntax->datum #'type)) 'object))
       #:with member #'type.member
       #:with object? #'type.object?
       #:with kwd (syntax->keyword #'name)
@@ -62,6 +97,10 @@
        (define (list-field? field)
          (field-is? field 'list))
 
+       (define (complex-field? field)
+         (or (object-field? field)
+             (list-field? field)))
+
        (define (find-complex-objects fields [prefix ""] [path null])
          (apply
           append
@@ -78,8 +117,7 @@
                                'field-details (map (lambda (f)
                                                      (define is-object? (object-field? f))
                                                      (define is-list? (list-field? f))
-                                                     (define is-complex? (or is-object?
-                                                                             is-list?))
+                                                     (define is-complex? (complex-field? f))
                                                      (hash 'name (car f)
                                                            'object? is-object?
                                                            'list? is-list?
@@ -88,7 +126,7 @@
                                                    subfields)
                                'path path)
                          (find-complex-objects subfields next-prefix path))))
-               (filter object-field? fields))))
+               (filter complex-field? fields))))
 
        (define response-fields
          (syntax->datum #'(response-field ...)))
@@ -114,42 +152,7 @@
                                (string->url uri))))
 
            (define (parse-response-id raw)
-             (define (deep-hash-ref h path [last #f])
-               (define value h)
-               (define full-steps (append (cdr path) (filter identity (list last))))
-
-               (when (not (null? full-steps))
-               (let loop ([steps full-steps])
-                 (define step (car steps))
-                 (define next (hash-ref value step))
-                 (cond [(list? next)
-                        (set! value (map (lambda (item)
-                                           (deep-hash-ref item steps)) next))]
-                       [else
-                         (set! value next)
-                         (unless (null? (cdr steps))
-                           (loop (cdr steps)))])))
-
-               value)
-
-             #,@(map (lambda (obj)
-                       `(define ,(hash-ref obj 'instance-id)
-                          (,(hash-ref obj 'id)
-                           ,@(map (lambda (f)
-                                    (if (hash-ref f 'object?)
-                                        `,(hash-ref f 'container)
-                                        `(deep-hash-ref raw
-                                                        ',(hash-ref obj 'path)
-                                                        ',(hash-ref f 'name))))
-                                  (hash-ref obj 'field-details)))))
-                     (reverse response-objects))
-
-             (define-values (#,@top-response-fields)
-               (values #,@(map (lambda (field)
-                                 `(hash-ref raw ',field))
-                               top-response-fields)))
-
-             #,top-response-instance-id)
+             (parse-data '#,response-fields raw '(name)))
 
            (define (build-request-id arg ... ...)
              (define data (make-hash))
@@ -170,35 +173,31 @@
               (string->jsexpr
                (http-response-body response))))))]))
 
-; (syntax->datum
-;  (expand-once
-;   #'
-  (define-endpoint chat-completions
-    #:uri "https://api.openai.com/v1/chat/completions"
-    #:headers (list "Content-Type: application/json"
-                    (format "Authorization: Bearer ~a" (openai-api-key)))
-    #:request (json [model string?]
-                    [messages list?]
-                    [temperature number? #:optional]
-                    [top-p number? #:optional]
-                    [n number? #:optional]
-                    [stream boolean? #:optional]
-                    [stop (or? string? list?) #:optional]
-                    [max-tokens integer? #:optional]
-                    [presence-penalty number? #:optional]
-                    [frequency-penalty number? #:optional]
-                    [logit-bias hash? #:optional]
-                    [user string? #:optional])
-    #:response (json [id string?]
-                     [object string?]
-                     [created integer?]
-                     [model string?]
-                     [usage (object [prompt_tokens integer?]
-                                    [completion_tokens integer?]
-                                    [total_tokens integer?])]
-                     [choices (list [message (object [role string?]
-                                                     [content string?])]
-                                    [finish_reason string?]
-                                    [index integer?])]
-                     ))
-  ; ))
+(define-endpoint chat-completions
+  #:uri "https://api.openai.com/v1/chat/completions"
+  #:headers (list "Content-Type: application/json"
+                  (format "Authorization: Bearer ~a" (openai-api-key)))
+  #:request (json [model string?]
+                  [messages list?]
+                  [temperature number? #:optional]
+                  [top-p number? #:optional]
+                  [n number? #:optional]
+                  [stream boolean? #:optional]
+                  [stop (or? string? list?) #:optional]
+                  [max-tokens integer? #:optional]
+                  [presence-penalty number? #:optional]
+                  [frequency-penalty number? #:optional]
+                  [logit-bias hash? #:optional]
+                  [user string? #:optional])
+  #:response (json [id string?]
+                   [object string?]
+                   [created integer?]
+                   [model string?]
+                   [usage (object [prompt_tokens integer?]
+                                  [completion_tokens integer?]
+                                  [total_tokens integer?])]
+                   [choices (list [message (object [role string?]
+                                                   [content string?])]
+                                  [finish_reason string?]
+                                  [index integer?])]
+                   ))
