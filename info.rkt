@@ -2,4 +2,4 @@
 
 (define name "openai-api-client")
 (define version "0.0")
-(define deps '("yaml" "monotonic" "threading"))
+(define deps '("yaml" "monotonic" "threading" "net/http-easy"))
