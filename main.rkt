@@ -1,14 +1,14 @@
 #lang racket/base
 
-(require openai-api-client/spec)
+(require "openapi.rkt")
 
-(define completions
-  (request-chat-completions
-   #:model "gpt-3.5-turbo"
-   #:messages (list (hash 'role "user"
-                          'content "Can you write a summary of https://www.allthingsdistributed.com/2023/03/australia-the-new-epicenter-for-healthtech-startups.html"))))
+(provide openai-api-key
+         create-chat-completion)
 
-(for ([choice (chat-completions-response-choices completions)])
-  (define message (chat-completions-choices-response-message choice))
-  (define content (chat-completions-choices-message-response-content message))
-  (displayln content))
+(define openai-api-key
+  (make-parameter (getenv "OPENAI_API_KEY")))
+
+(openapi "openapi.yaml"
+         #:headers (lambda (method path req)
+                     (hash 'Content-Type "application/json"
+                           'Authorization (format "Bearer ~a" (openai-api-key)))))
