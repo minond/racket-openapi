@@ -8,7 +8,7 @@
 (define openai-api-key
   (make-parameter (getenv "OPENAI_API_KEY")))
 
-(openapi "openapi.yaml"
+(openapi openai "openapi.yaml"
          #:headers (lambda (method path req)
                      (hash 'Content-Type "application/json"
                            'Authorization (format "Bearer ~a" (openai-api-key)))))

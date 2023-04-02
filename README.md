@@ -7,6 +7,7 @@ repo](https://github.com/openai/openai-openapi/tree/master).
 
 ## TODO
 
+- [x] Generate request functions for all endpoints
 - [ ] Dynamically provide all symbols created by the macro.
 - [ ] Generate request methods that accept keyword arguments instead of hashes.
 - [ ] Generate response structs and return that instead of hashes.

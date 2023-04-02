@@ -29,9 +29,9 @@
 
 (define (random-string [len 16])
   (list->string
-    (map (lambda (x)
-           (random-item charset))
-         (make-list len 0))))
+   (map (lambda (x)
+          (random-item charset))
+        (make-list len 0))))
 
 (begin-for-syntax
   (struct endpoint (id path method) #:transparent)
@@ -43,7 +43,8 @@
 
 (define-syntax (openapi stx)
   (syntax-parse stx
-    [(openapi path:str (~optional (~seq #:headers headers)))
+    [(_ name:id path:str
+        (~optional (~seq #:headers headers:expr)))
      (define definition (file->yaml (syntax->datum #'path)))
 
      (define servers (hash-ref definition "servers"))
@@ -52,13 +53,13 @@
 
      (define endpoints
        (flatten
-         (for/list ([path (hash-keys paths)])
-           (define by-method (hash-ref paths path))
-           (for/list ([method (hash-keys by-method)])
-             (define info (hash-ref by-method method))
-             (define name (normalize-id (hash-ref info "operationId")))
-             (define id (format-id #'openapi name))
-             (endpoint id path (string->symbol method))))))
+        (for/list ([path (hash-keys paths)])
+          (define by-method (hash-ref paths path))
+          (for/list ([method (hash-keys by-method)])
+            (define info (hash-ref by-method method))
+            (define action-name (normalize-id (hash-ref info "operationId")))
+            (define id (format-id #'name action-name))
+            (endpoint id path (string->symbol method))))))
 
      #`(begin
          (define urls '#,urls)
@@ -77,7 +78,7 @@
                  (define url (gen-url path))
                  (define headers (gen-headers method path req))
                  (define data (string->bytes/utf-8
-                                (jsexpr->string req)))
+                               (jsexpr->string req)))
                  (define id (random-string))
 
                  (log-info "~a ~a ~a ~aB"
