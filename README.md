@@ -11,8 +11,9 @@ repo](https://github.com/openai/openai-openapi/tree/master).
 - [x] Accept headers generator
 - [x] Accept authorization shorthand
 - [ ] Dynamically provide all symbols created by the macro.
-- [ ] Generate request methods that accept keyword arguments instead of hashes.
+- [x] Generate request methods that accept keyword arguments instead of hashes.
 - [ ] Generate response structs and return that instead of hashes.
+- [ ] Handle URL parameters
 - [ ] Extract the `openapi` macro into a separate repo.
 - [ ] Add documentation
 
