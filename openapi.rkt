@@ -67,6 +67,14 @@
         (deep-hash-ref (hash-ref value (car parts))
                        (cdr parts))))
 
+  (define (kind-of-equal? a b)
+    (equal? (if (string? a)
+                (string->symbol a)
+                a)
+            (if (string? b)
+                (string->symbol b)
+                b)))
+
   (define (normalize-id str)
     (~> str
         (string-replace "_" "-")
@@ -77,6 +85,7 @@
 (define-syntax (openapi stx)
   (syntax-parse stx
     [(_ name:id path:str
+        (~optional (~seq #:only only:expr))
         (~optional (~seq #:bearer bearer:expr))
         (~optional (~seq #:headers headers:expr)))
      (define definition (file->yaml (syntax->datum #'path)))
@@ -84,6 +93,11 @@
      (define servers (hash-ref definition "servers"))
      (define paths (hash-ref definition "paths"))
      (define urls (map (lambda~> (hash-ref "url")) servers))
+
+     (define only-generate
+       (if (attribute only)
+           (syntax->datum #'only)
+           null))
 
      (define endpoints
        (filter
@@ -95,8 +109,12 @@
              (for/list ([method (hash-keys by-method)])
                (define info (hash-ref by-method method))
                (define action-name (normalize-id (hash-ref info "operationId")))
-               (define id (format-id #'name action-name))
 
+               (when (and (not (null? only-generate))
+                          (not (member action-name only-generate kind-of-equal?)))
+                 (return #f))
+
+               (define id (format-id #'name action-name))
                (define request-body
                  (and (hash-has-key? info "requestBody")
                       (hash-ref info "requestBody")))

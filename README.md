@@ -10,13 +10,14 @@ repo](https://github.com/openai/openai-openapi/tree/master).
 - [x] Generate request functions for all endpoints
 - [x] Accept headers generator
 - [x] Accept authorization shorthand
-- [ ] Dynamically provide all symbols created by the macro.
 - [x] Generate request methods that accept keyword arguments instead of hashes.
-- [ ] Generate response structs and return that instead of hashes.
+- [x] Add avility to only generate specific actions.
+- [ ] Dynamically provide all symbols created by the macro.
 - [ ] Handle URL parameters
-- [ ] Extract the `openapi` macro into a separate repo.
+- [ ] Generate response structs and return that instead of hashes.
 - [ ] Handle endpoints that don't have request bodies.
 - [ ] Add documentation
+- [ ] Extract the `openapi` macro into a separate repo.
 
 ---
 
