@@ -101,6 +101,7 @@
                  (and (hash-has-key? info "requestBody")
                       (hash-ref info "requestBody")))
 
+               ;; TODO handle endpoints that don't have request bodies
                (unless request-body
                  (return #f))
 

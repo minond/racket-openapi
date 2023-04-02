@@ -15,6 +15,7 @@ repo](https://github.com/openai/openai-openapi/tree/master).
 - [ ] Generate response structs and return that instead of hashes.
 - [ ] Handle URL parameters
 - [ ] Extract the `openapi` macro into a separate repo.
+- [ ] Handle endpoints that don't have request bodies.
 - [ ] Add documentation
 
 ---
