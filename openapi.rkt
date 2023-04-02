@@ -9,6 +9,7 @@
                      yaml))
 
 (require racket/string
+         racket/function
          racket/list
          racket/sequence
 
@@ -44,6 +45,7 @@
 (define-syntax (openapi stx)
   (syntax-parse stx
     [(_ name:id path:str
+        (~optional (~seq #:bearer bearer:expr))
         (~optional (~seq #:headers headers:expr)))
      (define definition (file->yaml (syntax->datum #'path)))
 
@@ -68,8 +70,16 @@
 
          (define gen-headers
            (~? headers
-               (lambda (method path req)
-                 null)))
+               (lambda (-method -path req)
+                 (define bearer-value (~? bearer #f))
+                 (make-immutable-hash
+                  (filter (negate void?)
+                          (list*
+                           (when (hash? req)
+                             (cons 'Content-Type "application/json"))
+                           (when bearer-value
+                             (cons 'Authorization (format "Bearer ~a" bearer-value)))
+                           null))))))
 
          #,@(for/list ([endpoint endpoints])
               `(define (,(endpoint-id endpoint) req)
