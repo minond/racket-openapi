@@ -46,7 +46,7 @@ schema specific struct will be returned instead.
 
 ---
 
-[![Build](https://github.com/minond/racket-openai-api-client/actions/workflows/ci.yml/badge.svg)](https://github.com/minond/racket-openai-api-client/actions/workflows/ci.yml)
+[![Build](https://github.com/minond/racket-openapi/actions/workflows/ci.yml/badge.svg)](https://github.com/minond/racket-openapi/actions/workflows/ci.yml)
 
 [openapi]: https://openapi-generator.tech
 [openai_api_docs]: https://platform.openai.com/docs/introduction

@@ -26,5 +26,5 @@ jobs:
       #       ~/.local/share/racket
       #     key: ${{ runner.os }}-racket
 
-      - run: raco pkg install --no-docs --skip-installed --auto --name openai-api-client
-      - run: raco test -x -p openai-api-client
+      - run: raco pkg install --no-docs --skip-installed --auto --name openapi
+      - run: raco test -x -p openapi
