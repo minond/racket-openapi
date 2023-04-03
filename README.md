@@ -37,7 +37,7 @@ schema specific struct will be returned instead.
 - [x] Accept headers generator
 - [x] Accept authorization shorthand
 - [x] Generate request methods that accept keyword arguments instead of hashes.
-- [x] Add avility to only generate specific actions.
+- [x] Add ability to only generate specific actions.
 - [ ] Dynamically provide all symbols created by the macro.
 - [ ] Handle URL parameters
 - [ ] Generate response structs and return that instead of hashes.
